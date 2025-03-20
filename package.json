@@ -3,7 +3,7 @@
   "displayName": "ActivityDoor",
   "publisher": "EminHaziyev",
   "description": "Show your vs code activity anywhere in iframe.",
-  "version": "1.0.3",
+  "version": "2.1.6",
   "icon": "media/ADoor.png",
   "engines": {
     "vscode": "^1.98.0"

@@ -22,9 +22,12 @@ You will get `ActivityDoor: Activity tracking started!` if everything is OK.
 
 
 ##
-Your activity will be updated in every 30 seconds.
 
-If you don't change anything on document in 40 seconds, it will change your activity to idle, and iframe will show `I'm not writing code right now.
+When you open Visual Studio Code, activity tracking will start automatically. You will see "Stop activity tracking on the left bottom corner. If you click this, you will see "I'm not writing code right now." on your widget. 
+
+## Tutorial
+
+![](/media/0320.mp4)
 
 ## Commands
 `ActivityDoor: Store API key` - Change or store API key.

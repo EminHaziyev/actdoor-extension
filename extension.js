@@ -1,38 +1,34 @@
-const repl = require('repl');
 const vscode = require('vscode');
 const axios = require('axios');
 const path = require('path');
 
 let intervalId = null;
-let timerId = null;
 let stopwatchTime = 0;
+let activityIntervalId = null;
 let secretStorage;
-let inactivityTimer = null;
-let typingFlag = false;
+let startTrackingButton;
+let stopTrackingButton;
 
 function startStopwatch() {
     stopwatchTime = 0;
-    timerId = setInterval(() => {
+    intervalId = setInterval(() => {
         stopwatchTime += 1;
     }, 1000);
+
+    activityIntervalId = setInterval(() => {
+        sendActivityData(secretStorage);
+    }, 30000);
 }
 
 function stopStopwatch() {
-    if (timerId) {
-        clearInterval(timerId);
-        timerId = null;
+    if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
     }
-}
-
-function resetInactivityTimer() {
-    if (inactivityTimer) {
-        clearTimeout(inactivityTimer);
+    if (activityIntervalId) {
+        clearInterval(activityIntervalId);
+        activityIntervalId = null;
     }
-    inactivityTimer = setTimeout(() => {
-        sendActivityData(secretStorage, true);
-        vscode.window.showInformationMessage("ActivityDoor: User is idle. Activity data sent.");
-        stopContinuousTracking();
-    }, 40000); // 40 seconds of inactivity
 }
 
 async function storeSecret(secretStorage) {
@@ -51,7 +47,7 @@ async function storeSecret(secretStorage) {
     vscode.window.showInformationMessage("ActivityDoor: API Key saved successfully!");
 }
 
-async function sendActivityData(secretStorage, turnOff) {
+async function sendActivityData(secretStorage, isStop) {
     const apiKey = await secretStorage.get("myApiKey");
     const editor = vscode.window.activeTextEditor;
     if (!editor) return;
@@ -59,12 +55,10 @@ async function sendActivityData(secretStorage, turnOff) {
     const document = editor.document;
     const currentFile = path.basename(document.fileName);
     const currentFolder = path.basename(vscode.workspace.workspaceFolders ? vscode.workspace.workspaceFolders[0].uri.fsPath : 'No Folder Opened');
-    
-    if (turnOff) {
-        stopwatchTime = -1;
-        console.log("Turning off activity tracking");
-    }
 
+    if(isStop == true){
+        stopwatchTime = -1;
+    }
     const activity = {
         fileName: currentFile,
         folderName: currentFolder,
@@ -81,39 +75,27 @@ async function sendActivityData(secretStorage, turnOff) {
     }
 }
 
-async function startContinuousTracking(secretStorage) {
+async function startTracking(secretStorage) {
     const apiKey = await secretStorage.get("myApiKey");
 
     if (!apiKey) {
         storeSecret(secretStorage);
         return;
     }
-    if (intervalId) {
-        
-        return;
-    }
 
-    intervalId = setInterval(() => {
-        sendActivityData(secretStorage, false);
-    }, 30*1000); 
-
+    startStopwatch();
     vscode.window.showInformationMessage("ActivityDoor: Activity tracking started!");
+    startTrackingButton.hide();
+    stopTrackingButton.show();
 }
 
-function stopContinuousTracking() {
-    if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-        vscode.window.showInformationMessage("ActivityDoor: Activity tracking stopped!");
-        try{
-            sendActivityData(secretStorage, true);
-        }
-        catch(err){
-            console.log("Error in sending data");
-        }
-    } else {
-        vscode.window.showWarningMessage("ActivityDoor: No tracking process is running.");
-    }
+function stopTracking(secretStorage) {
+    stopStopwatch();
+    vscode.window.showInformationMessage("ActivityDoor: Activity tracking stopped!");
+    sendActivityData(secretStorage,true);
+
+    startTrackingButton.show();
+    stopTrackingButton.hide();
 }
 
 function activate(context) {
@@ -124,30 +106,22 @@ function activate(context) {
     });
 
     let startTrackingCommand = vscode.commands.registerCommand("extension.startTracking", () => {
-        startContinuousTracking(secretStorage);
+        startTracking(secretStorage);
     });
 
     let stopTrackingCommand = vscode.commands.registerCommand("extension.stopTracking", () => {
-        stopContinuousTracking();
+        stopTracking(secretStorage);
     });
+    startTracking(secretStorage);
+    startTrackingButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 1);
+    startTrackingButton.text = "Start Activity Tracking";
+    startTrackingButton.command = "extension.startTracking";
+    startTrackingButton.hide();
 
-    vscode.workspace.onDidChangeTextDocument((event) => {
-        if (event.contentChanges.length > 0) {
-            console.log("Text changed");
-            resetInactivityTimer();
-
-            if (!intervalId) {
-                console.log("User became active again. Restarting tracking...");
-                startContinuousTracking(secretStorage);
-            }
-            
-            
-        }
-    });
-
-    startStopwatch();
-    startContinuousTracking(secretStorage);
-    sendActivityData(secretStorage, false)
+    stopTrackingButton = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 2);
+    stopTrackingButton.text = "Stop Activity Tracking";
+    stopTrackingButton.command = "extension.stopTracking";
+    stopTrackingButton.show();
 
     context.subscriptions.push(storeApiKeyCommand, startTrackingCommand, stopTrackingCommand);
 }
@@ -155,9 +129,7 @@ function activate(context) {
 function deactivate() {
     return new Promise(async (resolve) => {
         try {
-            stopContinuousTracking();
-            stopStopwatch();
-            await sendActivityData(secretStorage, true); // Send data when deactivating
+            stopTracking(secretStorage);
             console.log("ActivityDoor: Deactivated!");
             resolve();
         } catch (error) {
